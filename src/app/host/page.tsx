@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import RadarChart from '@/components/RadarChart';
 import Leaderboard from '@/components/Leaderboard';
 import JoinQRCard from '@/components/JoinQRCard';
+import HostControlWindow from '@/components/HostControlWindow';
 import { useGameRoom } from '@/hooks/useGameRoom';
 import { CorrectnessScore } from '@/types/game';
 import { generateRoomCode, getSavedHostSession, saveHostSession } from '@/lib/storage';
@@ -20,6 +21,8 @@ import {
   ChevronRight,
   Sparkles,
   Award,
+  SlidersHorizontal,
+  Eye,
 } from 'lucide-react';
 
 const PRESET_TEMPLATES = [
@@ -62,6 +65,7 @@ export default function HostPage() {
   const [correctnessSelection, setCorrectnessSelection] = useState<Record<number, CorrectnessScore>>({});
   const [showVotesOnChart, setShowVotesOnChart] = useState<boolean>(true);
   const [showCorrectnessOnChart, setShowCorrectnessOnChart] = useState<boolean>(false);
+  const [isControlWindowOpen, setIsControlWindowOpen] = useState<boolean>(true);
 
   // Hook sincronizzazione stanza con WebRTC P2P
   const {
@@ -254,14 +258,30 @@ export default function HostPage() {
           </div>
 
           {setupCompleted && (
-            <button
-              type="button"
-              onClick={handleResetSession}
-              className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-800 rounded-xl transition cursor-pointer"
-              title="Nuova Partita"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setIsControlWindowOpen(!isControlWindowOpen)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer shadow-md ${
+                  isControlWindowOpen
+                    ? 'bg-indigo-600 border-indigo-400 text-white ring-2 ring-indigo-500/30'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-700'
+                }`}
+                title="Apri o nascondi la finestra pop-up di regia per le risposte"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>{isControlWindowOpen ? 'Nascondi Regia' : '🎛️ Apri Regia Riservata'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetSession}
+                className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-800 rounded-xl transition cursor-pointer"
+                title="Nuova Partita"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </>
           )}
         </div>
       </header>
@@ -554,127 +574,39 @@ export default function HostPage() {
                   size={520}
                 />
 
-                {/* Pannello Assegnazione Correttezza da parte dell'Host */}
-                <div className="w-full mt-6 pt-5 border-t border-zinc-800">
-                  <div className="flex items-center justify-between mb-3">
+                {/* Scheda di Presentazione Proiettata (Nessun dato riservato visibile al pubblico) */}
+                <div className="w-full mt-6 pt-4 border-t border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                      <SlidersHorizontal className="w-4 h-4" />
+                    </span>
                     <div>
-                      <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-                        <Award className="w-4 h-4 text-emerald-400" />
-                        Attribuzione Correttezza Risposte
-                      </h4>
-                      <p className="text-xs text-zinc-400">
-                        Seleziona la dimensione corretta (1 pt) ed eventuali mezze correttezza (0.5 pt).
-                      </p>
+                      <div className="text-xs font-bold text-white">
+                        {room?.status === 'voting'
+                          ? 'Votazioni aperte per la domanda corrente'
+                          : 'Risultati e risposte corrette rivelati sul grafico'}
+                      </div>
+                      <div className="text-[11px] text-zinc-400">
+                        {room?.status === 'voting'
+                          ? `${currentRoundVotesCount} su ${participantsList.length} partecipanti hanno votato`
+                          : 'Usa la finestra regia per preparare la domanda successiva'}
+                      </div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setCorrectnessSelection({})}
-                      className="text-xs text-zinc-400 hover:text-white underline cursor-pointer"
-                    >
-                      Azzera
-                    </button>
                   </div>
 
-                  {/* Bottoni Punteggio per ogni dimensione */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-                    {(room?.dimensions || dimensionNames).map((dimName, idx) => {
-                      const currentScore = correctnessSelection[idx] ?? 0;
-                      const votesForDim = voteCounts[idx] || 0;
-
-                      return (
-                        <div
-                          key={`score-ctrl-${idx}`}
-                          className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
-                            currentScore === 1
-                              ? 'bg-emerald-950/60 border-emerald-500/60'
-                              : currentScore === 0.5
-                              ? 'bg-amber-950/60 border-amber-500/60'
-                              : 'bg-zinc-800/40 border-zinc-700/50'
-                          }`}
-                        >
-                          <div className="min-w-0 pr-2">
-                            <span className="text-xs font-bold text-white block truncate">
-                              {dimName}
-                            </span>
-                            <span className="text-[11px] text-zinc-400">
-                              {votesForDim} {votesForDim === 1 ? 'voto' : 'voti'}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => toggleDimensionScore(idx, 0)}
-                              className={`px-2 py-1 rounded text-xs font-semibold cursor-pointer ${
-                                currentScore === 0
-                                  ? 'bg-zinc-700 text-zinc-200'
-                                  : 'text-zinc-500 hover:text-zinc-300'
-                              }`}
-                            >
-                              0 pt
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => toggleDimensionScore(idx, 0.5)}
-                              className={`px-2 py-1 rounded text-xs font-bold cursor-pointer transition ${
-                                currentScore === 0.5
-                                  ? 'bg-amber-500 text-black shadow'
-                                  : 'bg-zinc-800 text-amber-400 hover:bg-zinc-700'
-                              }`}
-                            >
-                              0.5
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => toggleDimensionScore(idx, 1)}
-                              className={`px-2 py-1 rounded text-xs font-bold cursor-pointer transition ${
-                                currentScore === 1
-                                  ? 'bg-emerald-500 text-black shadow'
-                                  : 'bg-zinc-800 text-emerald-400 hover:bg-zinc-700'
-                              }`}
-                            >
-                              1.0 pt
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Azioni del Round */}
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={handleConfirmScores}
-                      className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      <span>Rivela Risposta Corretta & Aggiorna Classifica</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsControlWindowOpen(true)}
+                    className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 cursor-pointer"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    <span>
+                      {room?.status === 'voting'
+                        ? 'Apri Regia Riservata (Assegna Correttezza)'
+                        : 'Apri Regia Riservata (Prossima Domanda)'}
+                    </span>
+                  </button>
                 </div>
-
-                {/* Box Avanzamento Prossima Domanda */}
-                {room?.status === 'scored' && (
-                  <div className="w-full mt-4 p-4 rounded-xl bg-indigo-950/40 border border-indigo-700/50 flex flex-col sm:flex-row items-center gap-3">
-                    <input
-                      type="text"
-                      placeholder={`Testo Domanda ${(room?.currentRound || 1) + 1} (opzionale)`}
-                      value={nextQuestionInput}
-                      onChange={(e) => setNextQuestionInput(e.target.value)}
-                      className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleNextRound}
-                      className="w-full sm:w-auto shrink-0 py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
-                    >
-                      <span>Prossima Domanda</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
               </div>
 
               {/* Colonna Destra (3/12): CLASSIFICA PUNTI DEI PARTECIPANTI */}
@@ -689,6 +621,39 @@ export default function HostPage() {
           </div>
         )}
       </main>
+
+      {/* Finestra Pop-up Mobile e Trascinabile per la Regia Riservata dell'Host */}
+      {setupCompleted && (
+        <HostControlWindow
+          isOpen={isControlWindowOpen}
+          onClose={() => setIsControlWindowOpen(false)}
+          dimensions={room?.dimensions || dimensionNames}
+          voteCounts={voteCounts}
+          correctnessSelection={correctnessSelection}
+          onToggleDimensionScore={toggleDimensionScore}
+          onResetScores={() => setCorrectnessSelection({})}
+          onConfirmScores={handleConfirmScores}
+          roundStatus={room?.status || 'voting'}
+          currentRound={room?.currentRound || 1}
+          nextQuestionInput={nextQuestionInput}
+          setNextQuestionInput={setNextQuestionInput}
+          onNextRound={handleNextRound}
+          totalVotedCurrentRound={currentRoundVotesCount}
+          totalParticipants={participantsList.length}
+        />
+      )}
+
+      {/* Pillola Galleggiante in basso a destra per riaprire rapidamente la regia se chiusa */}
+      {setupCompleted && !isControlWindowOpen && (
+        <button
+          type="button"
+          onClick={() => setIsControlWindowOpen(true)}
+          className="fixed bottom-6 right-6 z-40 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl shadow-2xl flex items-center gap-2 text-xs border border-indigo-400/40 cursor-pointer shadow-indigo-600/30 transition-all hover:scale-105"
+        >
+          <SlidersHorizontal className="w-4 h-4 text-white" />
+          <span>Apri Regia Riservata</span>
+        </button>
+      )}
     </div>
   );
 }
