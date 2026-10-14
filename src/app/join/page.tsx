@@ -521,7 +521,8 @@ function PlayerContent() {
                             }
                           });
                         }
-                        if (room.round?.votes) {
+                        // Non mostrare i voti della domanda corrente finché non viene svelata la risposta corretta
+                        if (room.status === 'scored' && room.round?.votes) {
                           Object.values(room.round.votes).forEach((v) => {
                             counts[v.dimensionIndex] = (counts[v.dimensionIndex] || 0) + 1;
                           });
@@ -536,11 +537,13 @@ function PlayerContent() {
                             count += Object.keys(pastRound.votes || {}).length;
                           });
                         }
-                        count += Object.keys(room.round?.votes || {}).length;
+                        if (room.status === 'scored') {
+                          count += Object.keys(room.round?.votes || {}).length;
+                        }
                         return count;
                       })()}
                       correctness={room.round?.correctness || {}}
-                      showVotes={true}
+                      showVotes={room.status === 'scored' || ((room.cumulativeMode ?? true) && (room.roundHistory?.length || 0) > 0)}
                       showCorrectness={room.status === 'scored'}
                       size={360}
                     />

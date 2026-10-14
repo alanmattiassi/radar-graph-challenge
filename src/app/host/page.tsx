@@ -137,12 +137,15 @@ export default function HostPage() {
     }
   };
 
-  // Calcolo conteggio voti per ciascuna dimensione (con supporto cumulativo attivo di default)
-  const voteCounts = useMemo(() => {
+  const isRoundScored = room?.status === 'scored';
+
+  // Calcolo conteggio voti per ciascuna dimensione
+  // REGOLA TASSATIVA: I voti della domanda corrente rimangono completamente NASCOSTI sulle dimensioni finché non viene svelata la risposta corretta!
+  const visibleVoteCounts = useMemo(() => {
     const counts: Record<number, number> = {};
     if (!room) return counts;
 
-    // Se la modalità cumulativa è attiva, somma i voti di tutti i round storici
+    // Se la modalità cumulativa è attiva, includi i voti dei round precedenti già conclusi
     if (isCumulative && room.roundHistory && room.roundHistory.length > 0) {
       room.roundHistory.forEach((pastRound) => {
         if (pastRound.votes) {
@@ -153,19 +156,19 @@ export default function HostPage() {
       });
     }
 
-    // Aggiunge i voti del round corrente
-    if (room.round && room.round.votes) {
+    // Aggiungi i voti della domanda corrente SOLTANTO se la risposta corretta è già stata svelata (status === 'scored')
+    if (isRoundScored && room.round && room.round.votes) {
       Object.values(room.round.votes).forEach((v) => {
         counts[v.dimensionIndex] = (counts[v.dimensionIndex] || 0) + 1;
       });
     }
 
     return counts;
-  }, [room, isCumulative]);
+  }, [room, isCumulative, isRoundScored]);
 
-  const totalVotesCount = useMemo(() => {
-    return Object.values(voteCounts).reduce((sum, count) => sum + count, 0);
-  }, [voteCounts]);
+  const visibleTotalVotes = useMemo(() => {
+    return Object.values(visibleVoteCounts).reduce((sum, count) => sum + count, 0);
+  }, [visibleVoteCounts]);
 
   const currentRoundVotesCount = useMemo(() => {
     if (!room || !room.round || !room.round.votes) return 0;
@@ -454,7 +457,7 @@ export default function HostPage() {
                       <>
                         <span>•</span>
                         <span className="text-indigo-400 font-semibold">
-                          Cumulativo: {totalVotesCount} voti su {(room?.roundHistory?.length || 0) + 1} round
+                          Cumulativo: {visibleTotalVotes} voti su {(room?.roundHistory?.length || 0) + 1} round
                         </span>
                       </>
                     )}
@@ -566,11 +569,11 @@ export default function HostPage() {
                 <RadarChart
                   numDimensions={room?.numDimensions || numDimensions}
                   dimensions={room?.dimensions || dimensionNames}
-                  votes={voteCounts}
-                  totalVoters={totalVotesCount}
+                  votes={visibleVoteCounts}
+                  totalVoters={visibleTotalVotes}
                   correctness={room?.round?.correctness || correctnessSelection}
-                  showVotes={showVotesOnChart}
-                  showCorrectness={showCorrectnessOnChart}
+                  showVotes={isRoundScored || (isCumulative && (room?.roundHistory?.length || 0) > 0)}
+                  showCorrectness={isRoundScored}
                   size={520}
                 />
 
@@ -628,7 +631,7 @@ export default function HostPage() {
           isOpen={isControlWindowOpen}
           onClose={() => setIsControlWindowOpen(false)}
           dimensions={room?.dimensions || dimensionNames}
-          voteCounts={voteCounts}
+          voteCounts={visibleVoteCounts}
           correctnessSelection={correctnessSelection}
           onToggleDimensionScore={toggleDimensionScore}
           onResetScores={() => setCorrectnessSelection({})}

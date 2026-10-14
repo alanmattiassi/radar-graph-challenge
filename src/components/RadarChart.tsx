@@ -357,7 +357,11 @@ export default function RadarChart({
                     fontSize={11}
                     fontWeight="600"
                   >
-                    {showVotes && totalVoters > 0 ? `${voteCount} voti` : ''}
+                    {showVotes && totalVoters > 0
+                      ? showCorrectness
+                        ? `${voteCount} ${voteCount === 1 ? 'voto' : 'voti'}`
+                        : `${voteCount} voti (round prec.)`
+                      : ''}
                     {showVotes && showCorrectness && scoreVal > 0 ? ' • ' : ''}
                     {showCorrectness && scoreVal > 0 ? (scoreVal === 1 ? '✓ Corretta (1)' : '½ Parziale (0.5)') : ''}
                   </text>
@@ -369,12 +373,20 @@ export default function RadarChart({
       </div>
 
       {/* Legenda Riassuntiva */}
-      <div className="flex flex-wrap items-center justify-center gap-6 mt-4 text-xs sm:text-sm text-zinc-300">
+      <div className="flex flex-wrap items-center justify-center gap-4 mt-4 text-xs sm:text-sm text-zinc-300">
         {showVotes && (
           <div className="flex items-center gap-2 bg-indigo-950/60 border border-indigo-700/40 px-3 py-1.5 rounded-lg">
             <span className="w-3.5 h-3.5 rounded bg-indigo-500 shadow-sm" />
             <span className="font-semibold text-indigo-200">
-              Riempimento Votazioni ({totalVoters} {totalVoters === 1 ? 'voto' : 'voti'})
+              Riempimento Votazioni ({totalVoters} {totalVoters === 1 ? 'voto' : 'voti'}{!showCorrectness ? ' prec.' : ''})
+            </span>
+          </div>
+        )}
+        {!showCorrectness && (
+          <div className="flex items-center gap-2 bg-zinc-800/80 border border-zinc-700/60 px-3 py-1.5 rounded-lg text-amber-300">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="font-semibold text-xs">
+              Voti domanda corrente nascosti fino alla rivelazione
             </span>
           </div>
         )}

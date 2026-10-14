@@ -222,7 +222,11 @@ export default function HostControlWindow({
                         {idx + 1}. {dimName}
                       </span>
                       <span className="text-[10px] text-zinc-400">
-                        {votesForDim} {votesForDim === 1 ? 'voto' : 'voti'}
+                        {roundStatus === 'scored' ? (
+                          `${votesForDim} ${votesForDim === 1 ? 'voto' : 'voti'}`
+                        ) : (
+                          <span className="text-zinc-500 italic">🔒 Nascosto fino allo svelamento</span>
+                        )}
                       </span>
                     </div>
 
