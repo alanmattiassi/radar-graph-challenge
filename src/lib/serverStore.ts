@@ -1,6 +1,6 @@
 import { RoomState, Participant, CorrectnessScore } from '@/types/game';
 
-// Store in memoria per serverless / dev mode (quando Supabase non è configurato)
+// Store in memoria per serverless / dev mode
 const globalRooms = global as unknown as { __radar_rooms?: Map<string, RoomState> };
 if (!globalRooms.__radar_rooms) {
   globalRooms.__radar_rooms = new Map<string, RoomState>();
@@ -23,7 +23,8 @@ export function createRoom(
   code: string,
   numDimensions: number,
   dimensionNames: string[],
-  firstQuestion: string = 'Domanda 1'
+  firstQuestion: string = 'Domanda 1',
+  cumulativeMode: boolean = true
 ): RoomState {
   const newRoom: RoomState = {
     id: `room-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -41,6 +42,8 @@ export function createRoom(
       votes: {},
       correctness: {},
     },
+    roundHistory: [],
+    cumulativeMode: cumulativeMode, // Attivo di default come richiesto
     updatedAt: Date.now(),
   };
 
@@ -55,7 +58,6 @@ export function joinParticipant(
   const room = getRoom(roomCode);
   if (!room) return null;
 
-  // Se il partecipante esiste già (riconnessione), aggiorna nickname e lastSeen mantenendo il punteggio
   const existing = room.participants[participant.id];
   room.participants[participant.id] = {
     ...participant,
@@ -78,7 +80,6 @@ export function recordVote(
   const room = getRoom(roomCode);
   if (!room) return null;
 
-  // Accetta voti solo se il round combacia e la stanza è in votazione
   if (room.currentRound === roundNumber && (room.status === 'voting' || room.round.status === 'voting')) {
     room.round.votes[participantId] = {
       participantId,
@@ -104,14 +105,12 @@ export function setRoundCorrectness(
   room.round.status = 'scored';
   room.status = 'scored';
 
-  // Calcolo dei punteggi per ciascun partecipante che ha votato in questo round
   Object.values(room.round.votes).forEach((vote) => {
     const score = correctnessMap[vote.dimensionIndex] ?? 0;
     vote.scoreAwarded = score;
 
     if (room.participants[vote.participantId]) {
       const p = room.participants[vote.participantId];
-      // Aggiunge il punteggio del round al totale
       p.totalScore = Number(((p.totalScore || 0) + score).toFixed(1));
       p.lastRoundScore = score;
     }
@@ -127,6 +126,20 @@ export function nextRound(
 ): RoomState | null {
   const room = getRoom(roomCode);
   if (!room) return null;
+
+  if (!room.roundHistory) {
+    room.roundHistory = [];
+  }
+  // Archivia il round attuale nello storico prima di iniziare il successivo
+  if (room.round) {
+    room.roundHistory.push({
+      roundNumber: room.round.roundNumber,
+      questionText: room.round.questionText,
+      status: room.round.status,
+      votes: { ...room.round.votes },
+      correctness: { ...room.round.correctness },
+    });
+  }
 
   const nextRoundNum = room.currentRound + 1;
   room.currentRound = nextRoundNum;

@@ -44,6 +44,8 @@ export interface RoomState {
   status: GameStatus;
   participants: Record<string, Participant>;
   round: RoundState;
+  roundHistory?: RoundState[]; // Storico dei round precedenti per la modalità riempimento cumulativo
+  cumulativeMode?: boolean; // Opzione attiva di default per sommare i voti tra round successivi
   updatedAt: number;
 }
 

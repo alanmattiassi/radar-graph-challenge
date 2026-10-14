@@ -376,12 +376,24 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
   const nextQuestion = async (nextQuestionText: string): Promise<boolean> => {
     if (!roomCode || !room) return false;
 
+    const history = room.roundHistory ? [...room.roundHistory] : [];
+    if (room.round) {
+      history.push({
+        roundNumber: room.round.roundNumber,
+        questionText: room.round.questionText,
+        status: room.round.status,
+        votes: { ...room.round.votes },
+        correctness: { ...room.round.correctness },
+      });
+    }
+
     const nextRoundNum = room.currentRound + 1;
     const updatedRoom: RoomState = {
       ...room,
       currentRound: nextRoundNum,
       currentQuestion: nextQuestionText,
       status: 'voting',
+      roundHistory: history,
       round: {
         roundNumber: nextRoundNum,
         questionText: nextQuestionText,
@@ -411,6 +423,35 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
     return true;
   };
 
+  // Azione Host: attiva / disattiva la modalità riempimento cumulativo dai round precedenti
+  const toggleCumulativeMode = async (enabled?: boolean): Promise<boolean> => {
+    if (!room) return false;
+    const currentMode = room.cumulativeMode ?? true;
+    const newMode = enabled !== undefined ? enabled : !currentMode;
+
+    const updatedRoom: RoomState = {
+      ...room,
+      cumulativeMode: newMode,
+      updatedAt: Date.now(),
+    };
+
+    setRoom(updatedRoom);
+    saveHostSession(updatedRoom);
+    broadcastToPeers({ type: 'SYNC', room: updatedRoom });
+
+    try {
+      fetch(`/api/rooms/${roomCode}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cumulativeMode: newMode }),
+      });
+    } catch {
+      // Fallback
+    }
+
+    return true;
+  };
+
   return {
     room,
     loading,
@@ -421,5 +462,6 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
     submitVote,
     submitScores,
     nextQuestion,
+    toggleCumulativeMode,
   };
 }

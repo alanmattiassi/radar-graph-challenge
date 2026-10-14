@@ -70,10 +70,14 @@ export default function HostPage() {
     p2pConnected,
     submitScores,
     nextQuestion,
+    toggleCumulativeMode,
   } = useGameRoom({
     roomCode,
     isHost: true,
   });
+
+  // Modalità cumulativa attiva di default (i voti successivi si aggiungono ai precedenti)
+  const isCumulative = room?.cumulativeMode !== undefined ? room.cumulativeMode : true;
 
   // Ripristino sessione precedente da localStorage
   useEffect(() => {
@@ -129,17 +133,37 @@ export default function HostPage() {
     }
   };
 
-  // Calcolo conteggio voti per ciascuna dimensione
+  // Calcolo conteggio voti per ciascuna dimensione (con supporto cumulativo attivo di default)
   const voteCounts = useMemo(() => {
     const counts: Record<number, number> = {};
-    if (!room || !room.round || !room.round.votes) return counts;
-    Object.values(room.round.votes).forEach((v) => {
-      counts[v.dimensionIndex] = (counts[v.dimensionIndex] || 0) + 1;
-    });
+    if (!room) return counts;
+
+    // Se la modalità cumulativa è attiva, somma i voti di tutti i round storici
+    if (isCumulative && room.roundHistory && room.roundHistory.length > 0) {
+      room.roundHistory.forEach((pastRound) => {
+        if (pastRound.votes) {
+          Object.values(pastRound.votes).forEach((v) => {
+            counts[v.dimensionIndex] = (counts[v.dimensionIndex] || 0) + 1;
+          });
+        }
+      });
+    }
+
+    // Aggiunge i voti del round corrente
+    if (room.round && room.round.votes) {
+      Object.values(room.round.votes).forEach((v) => {
+        counts[v.dimensionIndex] = (counts[v.dimensionIndex] || 0) + 1;
+      });
+    }
+
     return counts;
-  }, [room]);
+  }, [room, isCumulative]);
 
   const totalVotesCount = useMemo(() => {
+    return Object.values(voteCounts).reduce((sum, count) => sum + count, 0);
+  }, [voteCounts]);
+
+  const currentRoundVotesCount = useMemo(() => {
     if (!room || !room.round || !room.round.votes) return 0;
     return Object.keys(room.round.votes).length;
   }, [room]);
@@ -404,8 +428,16 @@ export default function HostPage() {
                     </span>
                     <span>•</span>
                     <span className="text-emerald-400 font-semibold">
-                      {totalVotesCount} su {participantsList.length} votanti
+                      {currentRoundVotesCount} su {participantsList.length} votanti
                     </span>
+                    {isCumulative && (room?.roundHistory?.length || 0) > 0 && (
+                      <>
+                        <span>•</span>
+                        <span className="text-indigo-400 font-semibold">
+                          Cumulativo: {totalVotesCount} voti su {(room?.roundHistory?.length || 0) + 1} round
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -478,6 +510,38 @@ export default function HostPage() {
 
               {/* Colonna Centrale (6/12): GRAFICO RADAR POLIGONALE E CONTROLLI PUNTEGGIO */}
               <div className="lg:col-span-6 bg-zinc-900/90 border border-zinc-800 rounded-2xl p-5 shadow-2xl flex flex-col items-center">
+                {/* Interruttore 1-Click per Riempimento Cumulativo (attivo di default) */}
+                <div className="w-full flex items-center justify-between mb-4 bg-zinc-800/60 border border-zinc-700/60 p-2.5 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white">
+                      Riempimento Grafico:
+                    </span>
+                    <span className="text-[11px] text-zinc-400 hidden sm:inline">
+                      {isCumulative
+                        ? 'I voti della risposta successiva si aggiungono a quella precedente'
+                        : 'Mostra solo i voti della domanda corrente'}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleCumulativeMode(!isCumulative)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                      isCumulative
+                        ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300 shadow-sm'
+                        : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                    title="Clicca per attivare o disattivare il riempimento cumulativo"
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isCumulative ? 'bg-indigo-400 animate-pulse' : 'bg-zinc-600'
+                      }`}
+                    />
+                    <span>{isCumulative ? 'Cumulativo: ON' : 'Cumulativo: OFF'}</span>
+                  </button>
+                </div>
+
                 {/* Visualizzazione Radar Graph */}
                 <RadarChart
                   numDimensions={room?.numDimensions || numDimensions}

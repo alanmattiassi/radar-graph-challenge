@@ -35,9 +35,26 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { status, currentQuestion, nextQuestion } = body;
+    const { status, currentQuestion, nextQuestion, cumulativeMode } = body;
+
+    if (cumulativeMode !== undefined) {
+      room.cumulativeMode = Boolean(cumulativeMode);
+    }
 
     if (nextQuestion) {
+      if (!room.roundHistory) {
+        room.roundHistory = [];
+      }
+      if (room.round) {
+        room.roundHistory.push({
+          roundNumber: room.round.roundNumber,
+          questionText: room.round.questionText,
+          status: room.round.status,
+          votes: { ...room.round.votes },
+          correctness: { ...room.round.correctness },
+        });
+      }
+
       room.currentRound += 1;
       room.currentQuestion = nextQuestion;
       room.status = 'voting';

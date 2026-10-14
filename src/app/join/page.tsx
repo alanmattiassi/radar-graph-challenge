@@ -509,15 +509,36 @@ function PlayerContent() {
                     <RadarChart
                       numDimensions={room.numDimensions}
                       dimensions={room.dimensions}
-                      votes={
-                        room.round?.votes
-                          ? Object.values(room.round.votes).reduce((acc, v) => {
-                              acc[v.dimensionIndex] = (acc[v.dimensionIndex] || 0) + 1;
-                              return acc;
-                            }, {} as Record<number, number>)
-                          : {}
-                      }
-                      totalVoters={room.round?.votes ? Object.keys(room.round.votes).length : 0}
+                      votes={(() => {
+                        const counts: Record<number, number> = {};
+                        const isCumulative = room.cumulativeMode ?? true;
+                        if (isCumulative && room.roundHistory) {
+                          room.roundHistory.forEach((pastRound) => {
+                            if (pastRound.votes) {
+                              Object.values(pastRound.votes).forEach((v) => {
+                                counts[v.dimensionIndex] = (counts[v.dimensionIndex] || 0) + 1;
+                              });
+                            }
+                          });
+                        }
+                        if (room.round?.votes) {
+                          Object.values(room.round.votes).forEach((v) => {
+                            counts[v.dimensionIndex] = (counts[v.dimensionIndex] || 0) + 1;
+                          });
+                        }
+                        return counts;
+                      })()}
+                      totalVoters={(() => {
+                        const isCumulative = room.cumulativeMode ?? true;
+                        let count = 0;
+                        if (isCumulative && room.roundHistory) {
+                          room.roundHistory.forEach((pastRound) => {
+                            count += Object.keys(pastRound.votes || {}).length;
+                          });
+                        }
+                        count += Object.keys(room.round?.votes || {}).length;
+                        return count;
+                      })()}
                       correctness={room.round?.correctness || {}}
                       showVotes={true}
                       showCorrectness={room.status === 'scored'}
