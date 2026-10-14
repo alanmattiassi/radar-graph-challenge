@@ -80,3 +80,31 @@ export async function PATCH(
     return NextResponse.json({ error: 'Errore interno' }, { status: 500 });
   }
 }
+
+export async function PUT(
+  req: Request,
+  { params }: { params: Promise<{ code: string }> }
+) {
+  try {
+    const { code } = await params;
+    const roomCode = code.toUpperCase();
+    const body = await req.json();
+    const { room } = body;
+
+    if (!room || typeof room !== 'object') {
+      return NextResponse.json({ error: 'Dati stanza non validi' }, { status: 400 });
+    }
+
+    const stateToSave = {
+      ...room,
+      code: roomCode,
+      updatedAt: Date.now(),
+    };
+
+    saveRoom(stateToSave);
+    return NextResponse.json({ success: true, room: stateToSave });
+  } catch (error) {
+    console.error('Errore PUT room:', error);
+    return NextResponse.json({ error: 'Errore interno' }, { status: 500 });
+  }
+}

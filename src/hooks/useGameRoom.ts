@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { RoomState, CorrectnessScore, PlayerSession, Participant } from '@/types/game';
-import { getSavedPlayerSession, savePlayerSession, saveHostSession } from '@/lib/storage';
+import { RoomState, CorrectnessScore, PlayerSession, Participant, VoteRecord } from '@/types/game';
+import { getSavedPlayerSession, savePlayerSession, saveHostSession, getSavedHostSession } from '@/lib/storage';
 import type { DataConnection, Peer as PeerType } from 'peerjs';
 
 interface UseGameRoomOptions {
@@ -18,13 +18,21 @@ export function getHostPeerId(roomCode: string): string {
 }
 
 export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGameRoomOptions) {
-  const [room, setRoom] = useState<RoomState | null>(null);
+  const [room, setRoom] = useState<RoomState | null>(() => {
+    if (isHost && typeof window !== 'undefined' && roomCode) {
+      const saved = getSavedHostSession();
+      if (saved && saved.code?.toUpperCase() === roomCode.toUpperCase()) {
+        return saved;
+      }
+    }
+    return null;
+  });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [p2pConnected, setP2pConnected] = useState<boolean>(false);
 
-  const roomRef = useRef<RoomState | null>(null);
+  const roomRef = useRef<RoomState | null>(room);
   roomRef.current = room;
 
   // Riferimenti per connessioni WebRTC
@@ -58,26 +66,75 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
       }
       const data = await res.json();
       if (data.success && data.room) {
-        // Se non abbiamo ancora la stanza o se i dati API sono più recenti
-        setRoom((prev) => {
-          if (!prev || (data.room.updatedAt && data.room.updatedAt > (prev.updatedAt || 0))) {
-            return data.room;
-          }
-          return prev;
-        });
+        if (isHost) {
+          // L'Host è la sorgente primaria di verità del round e dello stato!
+          // Unisce partecipanti e voti inviati via fallback HTTP senza MAI retrocedere di round
+          setRoom((prev) => {
+            if (!prev) return data.room;
+            // REGOLA TASSATIVA: Non retrocedere MAI a un round precedente se l'Host è già avanti
+            if (data.room.currentRound < prev.currentRound) {
+              return prev;
+            }
+
+            let hasChanges = false;
+            const mergedParticipants = { ...prev.participants };
+            if (data.room.participants) {
+              Object.values(data.room.participants as Record<string, Participant>).forEach((sp) => {
+                if (!mergedParticipants[sp.id] || (sp.totalScore !== undefined && sp.totalScore > (mergedParticipants[sp.id].totalScore || 0))) {
+                  mergedParticipants[sp.id] = sp;
+                  hasChanges = true;
+                }
+              });
+            }
+
+            const mergedVotes = { ...(prev.round?.votes || {}) };
+            if (prev.currentRound === data.room.currentRound && data.room.round?.votes) {
+              Object.values(data.room.round.votes as Record<string, any>).forEach((sv) => {
+                if (!mergedVotes[sv.participantId]) {
+                  mergedVotes[sv.participantId] = sv;
+                  hasChanges = true;
+                }
+              });
+            }
+
+            if (hasChanges) {
+              const updated: RoomState = {
+                ...prev,
+                participants: mergedParticipants,
+                round: {
+                  ...prev.round,
+                  votes: mergedVotes,
+                },
+                updatedAt: Date.now(),
+              };
+              saveHostSession(updated);
+              broadcastToPeers({ type: 'SYNC', room: updated });
+              return updated;
+            }
+            return prev;
+          });
+        } else {
+          // Vista Partecipante: accetta se il round è più avanzato o se updatedAt è più recente
+          setRoom((prev) => {
+            if (!prev) return data.room;
+            if (data.room.currentRound > prev.currentRound) {
+              return data.room;
+            }
+            if (data.room.updatedAt && data.room.updatedAt > (prev.updatedAt || 0)) {
+              return data.room;
+            }
+            return prev;
+          });
+        }
         setError(null);
         setIsOnline(true);
-
-        if (isHost) {
-          saveHostSession(data.room);
-        }
       }
     } catch {
       setIsOnline(false);
     } finally {
       setLoading(false);
     }
-  }, [roomCode, isHost]);
+  }, [roomCode, isHost, broadcastToPeers]);
 
   // Inizializzazione WebRTC Peer-to-Peer
   useEffect(() => {
@@ -244,14 +301,44 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
         fetchRoomState();
       }
     };
-    window.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('online', fetchRoomState);
+    // Sincronizzazione cross-window per Host (Schermo Proiezione <-> Finestra Regia Separata)
+    let hostChannel: BroadcastChannel | null = null;
+    if (isHost && typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        hostChannel = new BroadcastChannel(`radar_host_bus_${roomCode.toUpperCase()}`);
+        hostChannel.onmessage = (event) => {
+          if (event.data && event.data.type === 'HOST_SYNC' && event.data.room) {
+            setRoom(event.data.room);
+          }
+        };
+      } catch (e) {
+        console.warn('BroadcastChannel init warning:', e);
+      }
+    }
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (isHost && e.key === 'radar_game_host_session' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue) as RoomState;
+          if (parsed && parsed.code?.toUpperCase() === roomCode.toUpperCase()) {
+            setRoom(parsed);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageEvent);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', fetchRoomState);
+      window.removeEventListener('storage', handleStorageEvent);
+      if (hostChannel) {
+        hostChannel.close();
+      }
 
       if (peerInstanceRef.current) {
         peerInstanceRef.current.destroy();
@@ -315,19 +402,20 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
 
   // Azione Host: assegnazione punteggi e calcolo classifica
   const submitScores = async (correctness: Record<number, CorrectnessScore>): Promise<boolean> => {
-    if (!roomCode || !room) return false;
+    const currentRoom = roomRef.current || room || (isHost ? getSavedHostSession() : null);
+    if (!roomCode || !currentRoom) return false;
 
     // Calcolo locale istantaneo per l'Host
     const correctnessMap: Record<number, CorrectnessScore> = {};
-    for (let i = 0; i < room.numDimensions; i++) {
+    for (let i = 0; i < currentRoom.numDimensions; i++) {
       const val = Number(correctness[i] ?? 0);
       correctnessMap[i] = (val === 1 || val === 0.5 ? val : 0) as CorrectnessScore;
     }
 
-    const updatedParticipants = { ...room.participants };
-    const votes = room.round.votes || {};
+    const updatedParticipants = { ...currentRoom.participants };
+    const votes = currentRoom.round?.votes || {};
 
-    Object.values(votes).forEach((vote) => {
+    Object.values(votes as Record<string, VoteRecord>).forEach((vote) => {
       const score = correctnessMap[vote.dimensionIndex] ?? 0;
       vote.scoreAwarded = score;
       if (updatedParticipants[vote.participantId]) {
@@ -338,11 +426,11 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
     });
 
     const updatedRoom: RoomState = {
-      ...room,
+      ...currentRoom,
       status: 'scored',
       participants: updatedParticipants,
       round: {
-        ...room.round,
+        ...currentRoom.round,
         status: 'scored',
         correctness: correctnessMap,
       },
@@ -355,18 +443,26 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
     // Broadcast istantaneo via WebRTC a tutti gli smartphone
     broadcastToPeers({ type: 'SYNC', room: updatedRoom });
 
-    // Sincronizza anche con l'API in memoria
+    // Notifica istantanea BroadcastChannel per finestre Host (Regia <-> Proiezione)
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel(`radar_host_bus_${roomCode.toUpperCase()}`);
+        bc.postMessage({ type: 'HOST_SYNC', room: updatedRoom });
+        bc.close();
+      } catch (e) {
+        console.warn('BroadcastChannel error:', e);
+      }
+    }
+
+    // Salva con certezza autorevole sul server via PUT
     try {
-      fetch(`/api/rooms/${roomCode}/score`, {
-        method: 'POST',
+      await fetch(`/api/rooms/${roomCode}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roundNumber: room.currentRound,
-          correctness: correctnessMap,
-        }),
+        body: JSON.stringify({ room: updatedRoom }),
       });
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn('Errore salvataggio server score:', e);
     }
 
     return true;
@@ -374,22 +470,23 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
 
   // Azione Host: avanza alla prossima domanda
   const nextQuestion = async (nextQuestionText: string): Promise<boolean> => {
-    if (!roomCode || !room) return false;
+    const currentRoom = roomRef.current || room || (isHost ? getSavedHostSession() : null);
+    if (!roomCode || !currentRoom) return false;
 
-    const history = room.roundHistory ? [...room.roundHistory] : [];
-    if (room.round) {
+    const history = currentRoom.roundHistory ? [...currentRoom.roundHistory] : [];
+    if (currentRoom.round) {
       history.push({
-        roundNumber: room.round.roundNumber,
-        questionText: room.round.questionText,
-        status: room.round.status,
-        votes: { ...room.round.votes },
-        correctness: { ...room.round.correctness },
+        roundNumber: currentRoom.round.roundNumber,
+        questionText: currentRoom.round.questionText,
+        status: currentRoom.round.status,
+        votes: { ...(currentRoom.round.votes || {}) },
+        correctness: { ...(currentRoom.round.correctness || {}) },
       });
     }
 
-    const nextRoundNum = room.currentRound + 1;
+    const nextRoundNum = currentRoom.currentRound + 1;
     const updatedRoom: RoomState = {
-      ...room,
+      ...currentRoom,
       currentRound: nextRoundNum,
       currentQuestion: nextQuestionText,
       status: 'voting',
@@ -407,17 +504,29 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
     setRoom(updatedRoom);
     saveHostSession(updatedRoom);
 
-    // Broadcast a tutti gli smartphone
+    // Broadcast istantaneo via WebRTC a tutti gli smartphone
     broadcastToPeers({ type: 'SYNC', room: updatedRoom });
 
+    // Notifica istantanea BroadcastChannel per finestre Host (Regia <-> Proiezione)
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel(`radar_host_bus_${roomCode.toUpperCase()}`);
+        bc.postMessage({ type: 'HOST_SYNC', room: updatedRoom });
+        bc.close();
+      } catch (e) {
+        console.warn('BroadcastChannel error:', e);
+      }
+    }
+
+    // Salva con certezza autorevole sul server via PUT
     try {
-      fetch(`/api/rooms/${roomCode}`, {
-        method: 'PATCH',
+      await fetch(`/api/rooms/${roomCode}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nextQuestion: nextQuestionText }),
+        body: JSON.stringify({ room: updatedRoom }),
       });
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn('Errore salvataggio server nextQuestion:', e);
     }
 
     return true;
@@ -425,12 +534,13 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
 
   // Azione Host: attiva / disattiva la modalità riempimento cumulativo dai round precedenti
   const toggleCumulativeMode = async (enabled?: boolean): Promise<boolean> => {
-    if (!room) return false;
-    const currentMode = room.cumulativeMode ?? true;
+    const currentRoom = roomRef.current || room || (isHost ? getSavedHostSession() : null);
+    if (!currentRoom || !roomCode) return false;
+    const currentMode = currentRoom.cumulativeMode ?? true;
     const newMode = enabled !== undefined ? enabled : !currentMode;
 
     const updatedRoom: RoomState = {
-      ...room,
+      ...currentRoom,
       cumulativeMode: newMode,
       updatedAt: Date.now(),
     };
@@ -439,14 +549,24 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
     saveHostSession(updatedRoom);
     broadcastToPeers({ type: 'SYNC', room: updatedRoom });
 
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel(`radar_host_bus_${roomCode.toUpperCase()}`);
+        bc.postMessage({ type: 'HOST_SYNC', room: updatedRoom });
+        bc.close();
+      } catch (e) {
+        console.warn('BroadcastChannel error:', e);
+      }
+    }
+
     try {
-      fetch(`/api/rooms/${roomCode}`, {
-        method: 'PATCH',
+      await fetch(`/api/rooms/${roomCode}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cumulativeMode: newMode }),
+        body: JSON.stringify({ room: updatedRoom }),
       });
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn('Errore salvataggio server cumulativeMode:', e);
     }
 
     return true;

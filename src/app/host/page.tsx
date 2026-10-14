@@ -23,6 +23,7 @@ import {
   Award,
   SlidersHorizontal,
   Eye,
+  ExternalLink,
 } from 'lucide-react';
 
 const PRESET_TEMPLATES = [
@@ -215,6 +216,18 @@ export default function HostPage() {
     }
   };
 
+  // Apertura della Finestra di Regia in una finestra separata del browser (per secondo monitor / proiettore)
+  const openSeparateControlWindow = () => {
+    const code = room?.code || roomCode;
+    const url = `/host/control?code=${encodeURIComponent(code)}`;
+    const width = 520;
+    const height = 880;
+    const left = typeof window !== 'undefined' && window.screen.width > width ? window.screen.width - width - 40 : 40;
+    const top = 60;
+    const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`;
+    window.open(url, 'RadarHostControlWindow', features);
+  };
+
   // Riavvio completo / nuova sessione
   const handleResetSession = () => {
     if (confirm('Sei sicuro di voler creare una nuova sessione? La stanza attuale verrà chiusa.')) {
@@ -262,18 +275,29 @@ export default function HostPage() {
 
           {setupCompleted && (
             <>
+              {/* Pulsante per Aprire la Finestra di Regia Separata (spostabile su secondo monitor) */}
+              <button
+                type="button"
+                onClick={openSeparateControlWindow}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-500/60 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer shadow-md shadow-indigo-600/30"
+                title="Apri la regia in una finestra separata del browser da spostare sul monitor del portatile durante la proiezione"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>🎛️ Apri Finestra Regia Separata</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setIsControlWindowOpen(!isControlWindowOpen)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer shadow-md ${
+                className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
                   isControlWindowOpen
-                    ? 'bg-indigo-600 border-indigo-400 text-white ring-2 ring-indigo-500/30'
+                    ? 'bg-zinc-700 border-zinc-500 text-white'
                     : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-700'
                 }`}
-                title="Apri o nascondi la finestra pop-up di regia per le risposte"
+                title="Apri o nascondi il pannello interno alla pagina"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span>{isControlWindowOpen ? 'Nascondi Regia' : '🎛️ Apri Regia Riservata'}</span>
+                <span>{isControlWindowOpen ? 'Chiudi Interno' : 'Pannello Interno'}</span>
               </button>
 
               <button
@@ -597,18 +621,25 @@ export default function HostPage() {
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsControlWindowOpen(true)}
-                    className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/20 cursor-pointer"
-                  >
-                    <SlidersHorizontal className="w-3.5 h-3.5" />
-                    <span>
-                      {room?.status === 'voting'
-                        ? 'Apri Regia Riservata (Assegna Correttezza)'
-                        : 'Apri Regia Riservata (Prossima Domanda)'}
-                    </span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={openSeparateControlWindow}
+                      className="flex-1 sm:flex-initial px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/30 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Finestra Regia Separata</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsControlWindowOpen(!isControlWindowOpen)}
+                      className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold rounded-xl text-xs transition flex items-center justify-center gap-1.5 border border-zinc-700 cursor-pointer"
+                      title="Pannello interno alla pagina"
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      <span>{isControlWindowOpen ? 'Chiudi' : 'Interno'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -630,6 +661,7 @@ export default function HostPage() {
         <HostControlWindow
           isOpen={isControlWindowOpen}
           onClose={() => setIsControlWindowOpen(false)}
+          onOpenSeparate={openSeparateControlWindow}
           dimensions={room?.dimensions || dimensionNames}
           voteCounts={visibleVoteCounts}
           correctnessSelection={correctnessSelection}

@@ -13,11 +13,13 @@ import {
   EyeOff,
   ShieldAlert,
   Users,
+  ExternalLink,
 } from 'lucide-react';
 
 interface HostControlWindowProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenSeparate?: () => void;
   dimensions: string[];
   voteCounts: Record<number, number>;
   correctnessSelection: Record<number, CorrectnessScore>;
@@ -36,6 +38,7 @@ interface HostControlWindowProps {
 export default function HostControlWindow({
   isOpen,
   onClose,
+  onOpenSeparate,
   dimensions,
   voteCounts,
   correctnessSelection,
@@ -138,8 +141,18 @@ export default function HostControlWindow({
           </span>
         </div>
 
-        {/* Controlli Finestra (Riduci a icona e Chiudi) */}
+        {/* Controlli Finestra (Apri in Finestra Separata, Riduci a icona e Chiudi) */}
         <div className="flex items-center gap-1.5">
+          {onOpenSeparate && (
+            <button
+              type="button"
+              onClick={onOpenSeparate}
+              className="p-1 rounded-lg text-indigo-400 hover:text-white hover:bg-indigo-900/60 transition"
+              title="Apri in finestra separata (stacca dal browser)"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setIsMinimized(!isMinimized)}
