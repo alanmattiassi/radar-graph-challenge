@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createRoom, getRoom, saveRoom } from '@/lib/serverStore';
-import { getSupabaseClient } from '@/lib/supabase';
+import { createRoom } from '@/lib/serverStore';
 
 export async function POST(req: Request) {
   try {
@@ -15,25 +14,6 @@ export async function POST(req: Request) {
     }
 
     const room = createRoom(code, numDimensions, dimensions, firstQuestion || 'Domanda 1');
-
-    // Se Supabase è configurato, sincronizza anche sul DB
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('rooms').upsert({
-          code: room.code,
-          num_dimensions: room.numDimensions,
-          dimensions: room.dimensions,
-          current_question: room.currentQuestion,
-          current_round: room.currentRound,
-          status: room.status,
-          updated_at: new Date().toISOString(),
-        });
-      } catch (e) {
-        console.warn('Sync Supabase non riuscito (fallback su store locale):', e);
-      }
-    }
-
     return NextResponse.json({ success: true, room });
   } catch (error) {
     console.error('Errore creazione stanza:', error);

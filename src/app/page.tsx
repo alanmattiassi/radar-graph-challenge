@@ -72,7 +72,7 @@ export default function HomePage() {
           <div className="lg:col-span-6 space-y-6">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-950/80 border border-indigo-500/30 text-indigo-300 text-xs font-semibold">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Multi-device • Online su Vercel & Supabase • Offline Resilience</span>
+              <span>Multi-device • Online su Vercel • WebRTC P2P Realtime • Offline Resilience</span>
             </div>
 
             <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-[1.15]">
@@ -190,7 +190,7 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="border-t border-zinc-800 py-6 text-center text-xs text-zinc-500">
-        Radar Graph Challenge • Progettato per Vercel, Supabase & Mobile Web Apps
+        Radar Graph Challenge • Zero Database • WebRTC P2P & Vercel Ready
       </footer>
     </div>
   );

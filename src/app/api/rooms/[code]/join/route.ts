@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getRoom, joinParticipant } from '@/lib/serverStore';
-import { getSupabaseClient } from '@/lib/supabase';
 import { Participant } from '@/types/game';
 
 export async function POST(
@@ -34,26 +33,6 @@ export async function POST(
     };
 
     const updatedRoom = joinParticipant(roomCode, participant);
-
-    // Sync Supabase
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('participants').upsert(
-          {
-            id: participant.id,
-            room_code: roomCode,
-            player_code: participant.playerCode,
-            nickname: participant.nickname,
-            total_score: participant.totalScore,
-            last_seen: new Date().toISOString(),
-          },
-          { onConflict: 'room_code, player_code' }
-        );
-      } catch (e) {
-        console.warn('Sync Supabase join non riuscito:', e);
-      }
-    }
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getRoom, recordVote } from '@/lib/serverStore';
-import { getSupabaseClient } from '@/lib/supabase';
 
 export async function POST(
   req: Request,
@@ -44,25 +43,6 @@ export async function POST(
       nickname || playerCode,
       dimensionIndex
     );
-
-    // Sync Supabase
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('votes').upsert(
-          {
-            room_code: roomCode,
-            round_number: roundNumber,
-            participant_id: participantId,
-            dimension_index: dimensionIndex,
-            created_at: new Date().toISOString(),
-          },
-          { onConflict: 'room_code, round_number, participant_id' }
-        );
-      } catch (e) {
-        console.warn('Sync Supabase vote non riuscito:', e);
-      }
-    }
 
     return NextResponse.json({
       success: true,

@@ -4,11 +4,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import RadarChart from '@/components/RadarChart';
 import Leaderboard from '@/components/Leaderboard';
 import JoinQRCard from '@/components/JoinQRCard';
-import SupabaseModal from '@/components/SupabaseModal';
 import { useGameRoom } from '@/hooks/useGameRoom';
-import { CorrectnessScore, RoomState } from '@/types/game';
+import { CorrectnessScore } from '@/types/game';
 import { generateRoomCode, getSavedHostSession, saveHostSession } from '@/lib/storage';
-import { getSupabaseCredentials } from '@/lib/supabase';
 import confetti from 'canvas-confetti';
 import {
   Settings2,
@@ -17,7 +15,7 @@ import {
   CheckCircle,
   HelpCircle,
   ArrowRight,
-  Database,
+  Radio,
   Users,
   ChevronRight,
   Sparkles,
@@ -64,26 +62,21 @@ export default function HostPage() {
   const [correctnessSelection, setCorrectnessSelection] = useState<Record<number, CorrectnessScore>>({});
   const [showVotesOnChart, setShowVotesOnChart] = useState<boolean>(true);
   const [showCorrectnessOnChart, setShowCorrectnessOnChart] = useState<boolean>(false);
-  const [supabaseModalOpen, setSupabaseModalOpen] = useState<boolean>(false);
-  const [hasSupabase, setHasSupabase] = useState<boolean>(false);
 
-  // Hook sincronizzazione stanza
+  // Hook sincronizzazione stanza con WebRTC P2P
   const {
     room,
     loading,
+    p2pConnected,
     submitScores,
     nextQuestion,
-    updateRoomStatus,
   } = useGameRoom({
     roomCode,
     isHost: true,
   });
 
-  // Controllo Supabase e ripristino sessione precedente da localStorage
+  // Ripristino sessione precedente da localStorage
   useEffect(() => {
-    const creds = getSupabaseCredentials();
-    setHasSupabase(Boolean(creds));
-
     const saved = getSavedHostSession();
     if (saved && saved.code) {
       setRoomCode(saved.code);
@@ -224,19 +217,17 @@ export default function HostPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Badge Stato Connessione Cloud Supabase */}
-          <button
-            type="button"
-            onClick={() => setSupabaseModalOpen(true)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
-              hasSupabase
-                ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60'
-                : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700'
+          {/* Badge Stato Connessione P2P Realtime */}
+          <div
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold ${
+              p2pConnected
+                ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                : 'bg-zinc-800 border-zinc-700 text-zinc-400'
             }`}
           >
-            <Database className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{hasSupabase ? 'Supabase Connesso' : 'Configura Cloud / Supabase'}</span>
-          </button>
+            <Radio className={`w-3.5 h-3.5 ${p2pConnected ? 'text-emerald-400 animate-pulse' : 'text-zinc-500'}`} />
+            <span>{p2pConnected ? 'Rete P2P Attiva' : 'Inizializzazione Rete...'}</span>
+          </div>
 
           {setupCompleted && (
             <button
@@ -634,12 +625,6 @@ export default function HostPage() {
           </div>
         )}
       </main>
-
-      {/* Modal Supabase */}
-      <SupabaseModal
-        isOpen={supabaseModalOpen}
-        onClose={() => setSupabaseModalOpen(false)}
-      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 Un'applicazione web interattiva e multiplayer per il gioco basato sul **riempimento dei grafi ad area (radar graph poligonali)**.
 
-Progettata per essere proiettata dall'Host su grande schermo o proiettore, mentre i partecipanti partecipano e votano in tempo reale dai loro **smartphone** scansionando un **QR Code**.
+**100% Zero Database**: Nessun account né configurazione esterna richiesta (niente Supabase, niente SQL). Funziona direttamente online con deploy su **Vercel** e sincronizzazione in tempo reale **WebRTC Peer-to-Peer** (con fallback HTTP) tra computer dell'Host e smartphone dei partecipanti su reti 4G/WiFi differenti.
 
 ---
 
@@ -21,7 +21,7 @@ Progettata per essere proiettata dall'Host su grande schermo o proiettore, mentr
 2. **Onboarding Istantaneo con QR Code e Codice Alfanumerico**:
    - L'Host mostra a schermo un QR Code ad alto contrasto.
    - I giocatori scansionano il codice dal proprio smartphone ed entrano subito nella stanza.
-   - A ogni partecipante viene assegnato un **codice alfanumerico univoco** (es. `P-8A2F`).
+   - A ogni partecipante viene attribuito un **codice alfanumerico univoco** (es. `P-8A2F`).
 
 3. **Votazione Dinamica & Riempimento Votazioni**:
    - L'Host presenta la prima domanda e apre le votazioni.
@@ -45,10 +45,9 @@ Progettata per essere proiettata dall'Host su grande schermo o proiettore, mentr
    - Tutti i dati di sessione (ID giocatore, codice alfanumerico, stanza, voti espressi, punteggio) sono salvati in `localStorage` sul singolo dispositivo.
    - Se la connessione cade, lo smartphone va in standby o la pagina viene ricaricata, il giocatore si ricollega all'istante senza perdere la propria identità o il proprio punteggio.
 
-8. **Deployment Online su Vercel & Supabase**:
-   - Pronto per il deploy immediato su **Vercel**.
-   - Integrazione nativa con **Supabase Realtime** per la sincronizzazione istantanea tra reti 4G/WiFi differenti.
-   - Include anche un motore di polling e API fallback che funziona anche in assenza di credenziali cloud configurate.
+8. **Deployment Immediato su Vercel (Zero Database)**:
+   - Deploy immediato su **Vercel** senza configurare alcuna variabile d'ambiente o database.
+   - Connessione WebRTC P2P diretta tra smartphone e Host, con fallback su API in memoria.
 
 ---
 
@@ -68,23 +67,11 @@ npm run dev
 
 ---
 
-## ☁️ Configurazione con Supabase & Vercel
+## ☁️ Deploy su Vercel (In 1 Minuto)
 
-### 1. Database Supabase
-1. Crea un progetto gratuito su [Supabase](https://supabase.com).
-2. Vai su **SQL Editor** nel tuo pannello Supabase.
-3. Copia e incolla l'intero contenuto del file [`supabase_schema.sql`](./supabase_schema.sql) ed eseguilo.
-4. Recupera da *Project Settings -> API* l'**URL del Progetto** e la **chiave Anon/Public**.
-
-### 2. Variabili d'Ambiente (.env.local o Vercel)
-Crea un file `.env.local` oppure inserisci le variabili nelle impostazioni di Vercel:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://tuo-progetto.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=la-tua-anon-key
-```
-
-> **Nota:** Puoi anche inserire le credenziali Supabase direttamente dall'interfaccia Host cliccando sul pulsante **"Configura Cloud / Supabase"** in alto a destra!
+1. Collega il repository GitHub a **[Vercel](https://vercel.com)**.
+2. Clicca su **Deploy**.
+3. **Fatto!** Nessuna chiave segreta, nessun database SQL e nessun costo: l'applicazione gira online e permette ai partecipanti di collegarsi da qualsiasi rete 4G o WiFi scansionando il QR Code sullo schermo dell'Host.
 
 ---
 
