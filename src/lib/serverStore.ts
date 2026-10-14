@@ -33,7 +33,7 @@ export function createRoom(
     dimensions: dimensionNames,
     currentQuestion: firstQuestion,
     currentRound: 1,
-    status: 'lobby',
+    status: 'voting',
     participants: {},
     round: {
       roundNumber: 1,

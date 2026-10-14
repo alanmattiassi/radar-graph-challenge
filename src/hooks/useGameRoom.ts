@@ -35,6 +35,28 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
   const roomRef = useRef<RoomState | null>(room);
   roomRef.current = room;
 
+  // Inizializza o aggiorna manualmente la stanza (utilizzato subito dopo la creazione)
+  const initRoom = useCallback((newRoom: RoomState) => {
+    setRoom(newRoom);
+    roomRef.current = newRoom;
+    setLoading(false);
+    setError(null);
+    saveHostSession(newRoom);
+  }, []);
+
+  // Ripristina da localStorage per l'Host quando roomCode diventa disponibile
+  useEffect(() => {
+    if (isHost && roomCode && !room) {
+      const saved = getSavedHostSession();
+      if (saved && saved.code?.toUpperCase() === roomCode.toUpperCase()) {
+        setRoom(saved);
+        roomRef.current = saved;
+        setLoading(false);
+        setError(null);
+      }
+    }
+  }, [isHost, roomCode, room]);
+
   // Riferimenti per connessioni WebRTC
   const peerInstanceRef = useRef<PeerType | null>(null);
   const hostConnectionsRef = useRef<Map<string, DataConnection>>(new Map());
@@ -59,7 +81,8 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
     try {
       const res = await fetch(`/api/rooms/${roomCode}`);
       if (!res.ok) {
-        if (res.status === 404) {
+        // Non sovrascrivere l'errore se siamo l'Host o se la stanza è già caricata/connessa
+        if (!isHost && res.status === 404 && !roomRef.current && !clientConnectionRef.current?.open) {
           setError('Stanza non trovata. Verifica il codice.');
         }
         return;
@@ -168,8 +191,9 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
 
             conn.on('open', () => {
               // Invia lo stato corrente della stanza al nuovo arrivato
-              if (roomRef.current) {
-                conn.send({ type: 'SYNC', room: roomRef.current });
+              const toSend = roomRef.current || (isHost ? getSavedHostSession() : null);
+              if (toSend) {
+                conn.send({ type: 'SYNC', room: toSend });
               }
             });
 
@@ -179,25 +203,38 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
               // Messaggio: Partecipante entra nella stanza
               if (data.type === 'JOIN' && data.player) {
                 setRoom((currentRoom) => {
-                  if (!currentRoom) return null;
+                  const baseRoom = currentRoom || (isHost ? getSavedHostSession() : null);
+                  if (!baseRoom) return null;
                   const p: Participant = {
                     id: data.player.playerId,
-                    roomCode: currentRoom.code,
+                    roomCode: baseRoom.code,
                     playerCode: data.player.playerCode,
                     nickname: data.player.nickname,
-                    totalScore: currentRoom.participants[data.player.playerId]?.totalScore || 0,
+                    totalScore: baseRoom.participants[data.player.playerId]?.totalScore || 0,
                     lastSeen: new Date().toISOString(),
                   };
                   const updated: RoomState = {
-                    ...currentRoom,
+                    ...baseRoom,
                     participants: {
-                      ...currentRoom.participants,
+                      ...baseRoom.participants,
                       [p.id]: p,
                     },
                     updatedAt: Date.now(),
                   };
                   saveHostSession(updated);
                   broadcastToPeers({ type: 'SYNC', room: updated });
+
+                  // Sincronizza anche con il server per i client HTTP
+                  try {
+                    fetch(`/api/rooms/${baseRoom.code}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ room: updated }),
+                    });
+                  } catch {
+                    // ignore
+                  }
+
                   return updated;
                 });
               }
@@ -578,6 +615,7 @@ export function useGameRoom({ roomCode, isHost = false, playerSession }: UseGame
     error,
     isOnline,
     p2pConnected,
+    initRoom,
     refreshRoom: fetchRoomState,
     submitVote,
     submitScores,

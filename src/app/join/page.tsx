@@ -127,8 +127,18 @@ function PlayerContent() {
     const finalCode = assignedCode || generatePlayerCode();
     const finalNickname = nicknameInput.trim() || `Giocatore ${finalCode}`;
 
+    const session: PlayerSession = {
+      playerId,
+      playerCode: finalCode,
+      nickname: finalNickname,
+      roomCode: targetRoom,
+      joinedAt: Date.now(),
+      savedVotes: {},
+    };
+
+    // Invia registrazione HTTP in background (per il fallback serverless)
     try {
-      const res = await fetch(`/api/rooms/${targetRoom}/join`, {
+      fetch(`/api/rooms/${targetRoom}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -136,32 +146,15 @@ function PlayerContent() {
           playerCode: finalCode,
           nickname: finalNickname,
         }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setJoinError(data.error || 'Impossibile entrare nella stanza. Verifica il codice.');
-        setIsJoining(false);
-        return;
-      }
-
-      const session: PlayerSession = {
-        playerId,
-        playerCode: finalCode,
-        nickname: finalNickname,
-        roomCode: targetRoom,
-        joinedAt: Date.now(),
-        savedVotes: {},
-      };
-
-      savePlayerSession(session);
-      setPlayerSession(session);
-    } catch (err) {
-      console.error('Errore join:', err);
-      setJoinError('Errore di connessione al server.');
-    } finally {
-      setIsJoining(false);
+      }).catch(() => {});
+    } catch {
+      // Ignora errori di rete
     }
+
+    // Salva sessione e avvia connessione P2P istantanea all'Host
+    savePlayerSession(session);
+    setPlayerSession(session);
+    setIsJoining(false);
   };
 
   // Voto del giocatore su una dimensione
@@ -329,9 +322,26 @@ function PlayerContent() {
               </div>
             </div>
 
-            {/* Scheda Domanda Corrente */}
-            <div className="bg-gradient-to-br from-zinc-900 to-indigo-950/30 border border-zinc-800 rounded-2xl p-5 shadow-xl">
-              <div className="flex items-center justify-between mb-2">
+            {!room ? (
+              <div className="p-8 bg-zinc-900 border border-zinc-800 rounded-2xl text-center space-y-3 shadow-xl my-4">
+                <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                <h3 className="font-bold text-white text-sm">Connessione all&apos;Host in corso...</h3>
+                <p className="text-xs text-zinc-400">
+                  Stiamo sincronizzando la stanza <span className="font-mono text-indigo-400 font-bold">{playerSession.roomCode}</span>.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleLeaveRoom}
+                  className="mt-3 text-xs text-zinc-500 hover:text-zinc-300 underline cursor-pointer"
+                >
+                  Cambia stanza o annulla
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Scheda Domanda Corrente */}
+                <div className="bg-gradient-to-br from-zinc-900 to-indigo-950/30 border border-zinc-800 rounded-2xl p-5 shadow-xl">
+                  <div className="flex items-center justify-between mb-2">
                 <span className="px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 font-bold text-xs uppercase tracking-wider border border-indigo-500/30">
                   Round {room?.currentRound || 1}
                 </span>
@@ -553,18 +563,18 @@ function PlayerContent() {
             )}
 
             {/* Classifica dei Giocatori */}
-            {room && (
-              <div className="mt-6">
-                <Leaderboard
-                  participants={participantsList}
-                  currentRoundVotes={room.round?.votes}
-                  highlightPlayerId={playerSession.playerId}
-                  isVotingActive={room.status === 'voting'}
-                />
-              </div>
-            )}
-          </div>
+            <div className="mt-6">
+              <Leaderboard
+                participants={participantsList}
+                currentRoundVotes={room.round?.votes}
+                highlightPlayerId={playerSession.playerId}
+                isVotingActive={room.status === 'voting'}
+              />
+            </div>
+          </>
         )}
+      </div>
+    )}
       </main>
     </div>
   );

@@ -6,7 +6,7 @@ import Leaderboard from '@/components/Leaderboard';
 import JoinQRCard from '@/components/JoinQRCard';
 import HostControlWindow from '@/components/HostControlWindow';
 import { useGameRoom } from '@/hooks/useGameRoom';
-import { CorrectnessScore } from '@/types/game';
+import { RoomState, CorrectnessScore } from '@/types/game';
 import { generateRoomCode, getSavedHostSession, saveHostSession } from '@/lib/storage';
 import confetti from 'canvas-confetti';
 import {
@@ -73,6 +73,7 @@ export default function HostPage() {
     room,
     loading,
     p2pConnected,
+    initRoom,
     submitScores,
     nextQuestion,
     toggleCumulativeMode,
@@ -113,28 +114,58 @@ export default function HostPage() {
     setDimensionNames([...preset.dimensions]);
   };
 
-  // Creazione stanza
+  // Creazione stanza istantanea
   const handleCreateRoom = async () => {
     const code = generateRoomCode();
+    const firstQ = questionInput.trim() || 'Domanda 1';
+
+    // Crea immediatamente l'oggetto della stanza locale con status 'voting'
+    const newRoom: RoomState = {
+      id: `room-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      code: code.toUpperCase(),
+      numDimensions,
+      dimensions: dimensionNames,
+      currentQuestion: firstQ,
+      currentRound: 1,
+      status: 'voting',
+      participants: {},
+      round: {
+        roundNumber: 1,
+        questionText: firstQ,
+        status: 'voting',
+        votes: {},
+        correctness: {},
+      },
+      roundHistory: [],
+      cumulativeMode: true,
+      updatedAt: Date.now(),
+    };
+
+    // Inizializza istantaneamente la stanza locale dell'Host
+    initRoom(newRoom);
+    setRoomCode(code);
+    setSetupCompleted(true);
+
+    // Registra la stanza anche sul backend serverless
     try {
-      const res = await fetch('/api/rooms', {
+      await fetch('/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code,
           numDimensions,
           dimensions: dimensionNames,
-          firstQuestion: questionInput,
+          firstQuestion: firstQ,
         }),
       });
-      const data = await res.json();
-      if (data.success && data.room) {
-        setRoomCode(code);
-        setSetupCompleted(true);
-        saveHostSession(data.room);
-      }
+
+      await fetch(`/api/rooms/${code}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room: newRoom }),
+      });
     } catch (e) {
-      console.error('Errore creazione stanza:', e);
+      console.warn('Errore sincronizzazione iniziale backend:', e);
     }
   };
 
